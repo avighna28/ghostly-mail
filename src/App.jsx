@@ -16,7 +16,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = "https://api.mail.tm";
+const API_BASE = import.meta.env.VITE_MAIL_API_BASE || "https://api.mail.tm";
 
 const App = () => {
   const [account, setAccount] = useState(null);
