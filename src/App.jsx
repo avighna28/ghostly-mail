@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Wifi,
-  ShieldCheck
+  ShieldCheck,
+  QrCode // Added QR Code icon
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react'; // Added QR Code library
 
 const API_BASE = import.meta.env.VITE_MAIL_API_BASE || "https://api.mail.tm";
 
@@ -25,10 +27,10 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState(null);
+  const [showQR, setShowQR] = useState(false); // Added QR state
   const [copying, setCopying] = useState(false);
   const [status, setStatus] = useState("Connecting...");
 
-  // Optimized random string with timestamp for absolute uniqueness
   const generateUniqueId = () => {
     return Math.random().toString(36).substring(2, 8) + Date.now().toString().slice(-4);
   };
@@ -52,7 +54,7 @@ const App = () => {
         body: JSON.stringify({ address, password })
       });
       
-      if (!regRes.ok) throw new Error("API Limit Reached or Network Issue");
+      if (!regRes.ok) throw new Error("API Limit Reached");
 
       const tokenRes = await fetch(`${API_BASE}/token`, {
         method: 'POST',
@@ -60,8 +62,6 @@ const App = () => {
         body: JSON.stringify({ address, password })
       });
       const tokenData = await tokenRes.json();
-
-      if (!tokenData.token) throw new Error("Auth Token Failed");
 
       const newAccount = { address, password, token: tokenData.token };
       setAccount(newAccount);
@@ -112,11 +112,13 @@ const App = () => {
   }, [token, fetchMessages]);
 
   const handleNewInbox = async () => {
-    localStorage.removeItem('mailtm_final'); 
-    setAccount(null);
-    setToken(null);
-    setEmails([]);
-    await createAccount();
+    if (window.confirm("Switch to a new secure identity?")) {
+      localStorage.removeItem('mailtm_final'); 
+      setAccount(null);
+      setToken(null);
+      setEmails([]);
+      await createAccount();
+    }
   };
 
   const openEmail = async (id) => {
@@ -155,14 +157,27 @@ const App = () => {
               {loading ? "Initializing..." : account?.address}
             </div>
             <div className="action-buttons">
+              {/* QR Code Trigger Button */}
+              <button 
+                className="btn-icon" 
+                onClick={() => setShowQR(true)} 
+                title="Generate QR Code"
+                disabled={loading}
+              >
+                <QrCode size={20} />
+              </button>
+              
               <button className="btn-icon" onClick={() => {
                 navigator.clipboard.writeText(account?.address);
                 setCopying(true);
                 setTimeout(() => setCopying(false), 2000);
-              }}>
+              }} disabled={loading}>
                 {copying ? <CheckCircle2 size={20} color="#10b981" /> : <Copy size={20} />}
               </button>
-              <button className="btn-icon" onClick={handleNewInbox} title="New Identity"><Trash2 size={20} /></button>
+              
+              <button className="btn-icon" onClick={handleNewInbox} title="New Identity" disabled={loading}>
+                <Trash2 size={20} />
+              </button>
             </div>
           </div>
 
@@ -182,7 +197,7 @@ const App = () => {
             <AnimatePresence mode='popLayout'>
               {emails.length > 0 ? (
                 emails.map((msg) => (
-                  <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="email-item" onClick={() => openEmail(msg.id)}>
+                  <motion.div key={msg.id} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="email-item" onClick={() => openEmail(msg.id)}>
                     <div className="email-item-info">
                       <span className="email-sender">{msg.from.name || msg.from.address}</span>
                       <span className="email-subject">{msg.subject}</span>
@@ -194,8 +209,8 @@ const App = () => {
                   </motion.div>
                 ))
               ) : !loading && (
-                <div className="empty-state" style={{ padding: '3rem 1rem' }}>
-                  <Inbox size={48} className="empty-icon" style={{ marginBottom: '1rem' }} />
+                <div className="empty-state">
+                  <Inbox size={48} className="empty-icon" />
                   <p>Inboxes are cleared every cycle.<br />Waiting for encrypted traffic...</p>
                 </div>
               )}
@@ -203,6 +218,54 @@ const App = () => {
           </div>
         </section>
       </main>
+
+      {/* QR Code Modal */}
+      <AnimatePresence>
+        {showQR && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-overlay" onClick={() => setShowQR(false)}>
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.9, y: 20 }} 
+              className="modal-content" 
+              style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Scan Identity</h3>
+                <button className="btn-icon" onClick={() => setShowQR(false)}><X size={24} /></button>
+              </div>
+              
+              <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)', display: 'inline-block', boxShadow: 'var(--shadow)' }}>
+                {account?.address && (
+                  <QRCodeSVG 
+                    value={account.address} 
+                    size={200}
+                    level="H"
+                    includeMargin={false}
+                  />
+                )}
+              </div>
+              
+              <p style={{ marginTop: '1.5rem', fontSize: '0.875rem', color: 'var(--secondary)', lineHeight: 1.5 }}>
+                Scan this code with any mobile device to quickly copy your temporary address.
+              </p>
+              
+              <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--accent)', borderRadius: '10px', fontSize: '0.75rem', wordBreak: 'break-all', color: 'var(--foreground)', fontWeight: 600 }}>
+                {account?.address}
+              </div>
+
+              <button 
+                className="btn-primary" 
+                style={{ marginTop: '1.5rem', width: '100%' }}
+                onClick={() => setShowQR(false)}
+              >
+                Close Trace
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {selectedEmail && (
